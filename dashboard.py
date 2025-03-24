@@ -76,7 +76,7 @@ def download_video(video_url):
 
 # --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
-st.title("📺 YouTube Video Dashboard")
+st.title("📺 Content Team | YouTube Video Dashboard")
 
 # Sidebar
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive"])
@@ -84,7 +84,7 @@ view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevan
 # --- Views ---
 if view == "⚡ QuickWatch":
     # Admin Manual Fetch
-    with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
+    with st.expander("📡 Run Manual Video Fetch (Content Manager Only)"):
         password = st.text_input("Enter admin password to fetch new videos", type="password")
         if password == "demoup123":
             if st.button("🔁 Fetch New Videos Now"):
