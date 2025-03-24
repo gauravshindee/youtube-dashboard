@@ -1,8 +1,7 @@
 import os
 import json
 import requests
-from datetime import datetime, timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 # --- Config
 YT_API_KEYS = [
@@ -776,6 +775,7 @@ BRAND_CHANNELS = {
 "Hotpoint Ariston Italia":"UC8MPCTVhSRRxC4gNlOfMEIw",
 "Bigben Audio":"UCAkLzy6vTtyn9hMMGFzXfEA",
 "Kenwood Polska":"UCMtt7G8SV_QX6VD2xsAAZ2A",
+"Samsung UK":"UC9KAEEmWnKkiBeskVPDYCZA",
 "Microsoft 365":"UCc3pNIRzIZ8ynI38GO6H01Q",
 "DYNAFIT":"UCEhulRg5WY-ReFxo3zoctKg",
 "Sage Appliances":"UCZkmYgQgbeXSpWtASv8RJYA",
@@ -6034,6 +6034,7 @@ BRAND_CHANNELS = {
 "Touroll":"UCPQRkxa9gm49GMrD4riw5mg"
 }
 
+
 OUTPUT_FILE = "data/quickwatch.json"
 
 # --- Helpers
@@ -6062,8 +6063,10 @@ def get_recent_uploads(channel_id, api_key):
     }
 
     res = requests.get(base_url, params=params)
+    if res.status_code == 403 and "quota" in res.text.lower():
+        raise RuntimeError("Quota exceeded")
     if res.status_code != 200:
-        return []
+        raise RuntimeError(f"Error {res.status_code}: {res.text}")
 
     items = res.json().get("items", [])
     return [{
@@ -6078,22 +6081,31 @@ def get_recent_uploads(channel_id, api_key):
 def fetch_all():
     existing = load_existing_videos()
     existing_ids = {v["video_id"] for v in existing}
-
-    api_index = 0
     new_videos = []
 
-    for brand, channel_id in BRAND_CHANNELS.items():
-        api_key = YT_API_KEYS[api_index % len(YT_API_KEYS)]
-        api_index += 1
+    channels = list(BRAND_CHANNELS.items())
+    key_index = 0
 
-        try:
-            recent = get_recent_uploads(channel_id, api_key)
-            for vid in recent:
-                if vid["video_id"] not in existing_ids:
-                    new_videos.append(vid)
-                    existing_ids.add(vid["video_id"])
-        except Exception as e:
-            print(f"Error fetching from {brand}: {e}")
+    for i, (brand, channel_id) in enumerate(channels):
+        if key_index >= len(YT_API_KEYS):
+            print("❌ All API keys exhausted.")
+            break
+
+        while key_index < len(YT_API_KEYS):
+            api_key = YT_API_KEYS[key_index]
+            try:
+                recent = get_recent_uploads(channel_id, api_key)
+                for vid in recent:
+                    if vid["video_id"] not in existing_ids:
+                        new_videos.append(vid)
+                        existing_ids.add(vid["video_id"])
+                break  # success, move to next channel
+            except RuntimeError as e:
+                print(f"⚠️ API key {key_index+1} failed for {brand}: {e}")
+                key_index += 1
+            except Exception as e:
+                print(f"⚠️ Error fetching from {brand}: {e}")
+                break  # move on to next channel
 
     combined = existing + new_videos
     save_videos(combined)
