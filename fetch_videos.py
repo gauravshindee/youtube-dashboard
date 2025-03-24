@@ -776,7 +776,6 @@ BRAND_CHANNELS = {
 "Hotpoint Ariston Italia":"UC8MPCTVhSRRxC4gNlOfMEIw",
 "Bigben Audio":"UCAkLzy6vTtyn9hMMGFzXfEA",
 "Kenwood Polska":"UCMtt7G8SV_QX6VD2xsAAZ2A",
-"Samsung UK":"UC9KAEEmWnKkiBeskVPDYCZA",
 "Microsoft 365":"UCc3pNIRzIZ8ynI38GO6H01Q",
 "DYNAFIT":"UCEhulRg5WY-ReFxo3zoctKg",
 "Sage Appliances":"UCZkmYgQgbeXSpWtASv8RJYA",
