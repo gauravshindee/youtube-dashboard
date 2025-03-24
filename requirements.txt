@@ -1,5 +1,5 @@
 streamlit==1.43.2
 pandas
 yt-dlp
-requests
+requests==2.31.0
 openpyxl
