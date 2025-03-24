@@ -5,17 +5,44 @@ import os
 import subprocess
 import pandas as pd
 import yt_dlp
+import time
 
-# Ensure directories exist
+# --- Secure Login Setup ---
+CORRECT_PASSWORD = "DemoUp2025!"
+LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours in seconds
+
+def authenticate():
+    st.set_page_config(page_title="🔐 Secure Login", layout="centered")
+    st.markdown("## 🔐 Welcome to DemoUp Dashboard")
+    st.write("Please enter the password to continue.")
+
+    password = st.text_input("Password", type="password")
+    if password == CORRECT_PASSWORD:
+        st.session_state["authenticated"] = True
+        st.session_state["login_time"] = time.time()
+        st.success("Access granted. Loading dashboard...")
+        st.rerun()
+    elif password:
+        st.error("❌ Incorrect password. Try again.")
+
+auth_time = st.session_state.get("login_time", 0)
+time_since_login = time.time() - auth_time
+
+if "authenticated" not in st.session_state or not st.session_state["authenticated"] or time_since_login > LOGIN_TIMEOUT:
+    st.session_state["authenticated"] = False
+    authenticate()
+    st.stop()
+
+# --- Setup Directories ---
 os.makedirs("data", exist_ok=True)
 os.makedirs("downloads", exist_ok=True)
 
-# File paths
+# --- File Paths ---
 DATA_FILE = "data/quickwatch.json"
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 
-# --- Data functions
+# --- Data Loaders ---
 def load_videos():
     if not os.path.exists(DATA_FILE):
         return []
@@ -32,7 +59,7 @@ def save_not_relevant(data):
     with open(NOT_RELEVANT_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-# --- Video download logic
+# --- Download Video via yt-dlp ---
 def download_video(video_url):
     ydl_opts = {
         "format": "best[ext=mp4]/best",
@@ -46,14 +73,14 @@ def download_video(video_url):
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
 
-# --- UI Config
+# --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
 
 # Sidebar
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive"])
 
-# --- Views
+# --- Views ---
 if view == "⚡ QuickWatch":
     # Admin Manual Fetch
     with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
@@ -66,7 +93,6 @@ if view == "⚡ QuickWatch":
                         capture_output=True,
                         text=True
                     )
-
                 if result.returncode == 0:
                     st.success("✅ Fetch completed successfully.")
                     st.text(result.stdout)
@@ -124,6 +150,7 @@ elif view == "📦 Archive":
         st.warning("Archive CSV not found.")
     else:
         df = pd.read_csv(ARCHIVE_FILE, encoding="utf-8", on_bad_lines="skip")
+        df.columns = df.columns.str.strip().str.lower()  # Clean headers
 
         # --- Search Bar
         search_query = st.text_input("🔍 Search title or channel", "")
