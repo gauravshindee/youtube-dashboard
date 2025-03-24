@@ -6,6 +6,7 @@ import subprocess
 import pandas as pd
 import yt_dlp
 import time
+import sys
 
 # --- Secure Login Setup ---
 CORRECT_PASSWORD = "DemoUp2025!"
@@ -89,7 +90,7 @@ if view == "⚡ QuickWatch":
             if st.button("🔁 Fetch New Videos Now"):
                 with st.spinner("Fetching videos... this may take up to 1–2 minutes..."):
                     result = subprocess.run(
-                        ["python3", "fetch_videos.py"],
+                        [sys.executable, "fetch_videos.py"],
                         capture_output=True,
                         text=True
                     )
