@@ -4,3 +4,5 @@ yt-dlp
 requests==2.31.0
 requests
 openpyxl
+gspread
+oauth2client
