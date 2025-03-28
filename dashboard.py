@@ -203,18 +203,15 @@ if view == "⚡ QuickWatch":
         col1, col2 = st.columns(2)
         with col1:
             if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                with st.spinner("Downloading..."):
-                    file_path, file_name = download_video(video["link"])
-                    with open(file_path, "rb") as file:
-                        with st.modal("💾 Enter DemoUp Movie ID", key=f"modal_{video['link']}"):
-                            st.markdown("### 💾 Save Movie ID")
-                            movie_id = st.text_input("Enter numeric DemoUp Movie ID", key=f"id_{video['link']}")
-                            if movie_id and not movie_id.isnumeric():
-                                st.error("Only numbers are allowed.")
-                            elif movie_id and st.button("Save ID", key=f"save_{video['link']}"):
-                                save_movie_id_to_sheet(movie_id)
-                                st.success("Saved to Google Sheet.")
-                                st.download_button("📥 Download Video", data=file, file_name=file_name, mime="video/mp4")
+                movie_id = st.text_input("Enter DemoUp Movie ID (numbers only)", key=f"movie_id_{video['link']}")
+                if movie_id and not movie_id.isnumeric():
+                    st.error("Only numbers are allowed.")
+                elif movie_id:
+                    save_movie_id_to_sheet(movie_id)
+                    with st.spinner("Downloading..."):
+                        file_path, file_name = download_video(video["link"])
+                        with open(file_path, "rb") as file:
+                            st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{video['link']}")
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
                 not_relevant.append(video)
