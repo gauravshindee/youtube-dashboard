@@ -12,25 +12,18 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from fetch_videos import fetch_all as fetch_videos_main
 
-# --- GitHub ZIP URLs ---
-RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
-RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
-
 # --- Google Sheets Setup ---
 GOOGLE_SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
 SHEET_NAME = "quickwatch"
+SERVICE_ACCOUNT_SECRET = json.loads(st.secrets["gcp_service_account"])
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    json.loads(st.secrets["gcp_service_account"]), scope
-)
-gs_client = gspread.authorize(creds)
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_SECRET, scope)
+gs_client = gspread.authorize(credentials)
 
-
-def load_quickwatch_from_gsheet():
-    sheet = gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
-    rows = sheet.get_all_records()
-    return rows
+# --- GitHub ZIP URLs ---
+RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
+RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
 
 # --- Download and extract if not already present ---
 def download_and_extract_zip(url, extract_to):
@@ -82,6 +75,12 @@ os.makedirs("downloads", exist_ok=True)
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
+
+# --- Loaders ---
+def load_quickwatch_from_gsheet():
+    sheet = gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
+    records = sheet.get_all_records()
+    return records
 
 def load_not_relevant():
     if not os.path.exists(NOT_RELEVANT_FILE):
@@ -182,42 +181,27 @@ if view == "⚡ QuickWatch":
             st.error("❌ Incorrect password.")
 
     st.markdown("---")
-    not_relevant = load_not_relevant()
     videos = load_quickwatch_from_gsheet()
+    not_relevant = load_not_relevant()
 
-    selected_video = st.session_state.get("selected_video")
-
-    col1, col2 = st.columns([2, 3])
-    with col1:
-        st.markdown("<div style='max-height: 80vh; overflow-y: auto;'>", unsafe_allow_html=True)
-        for i, video in enumerate(videos):
-            if video['link'] in [v['link'] for v in not_relevant]:
-                continue
-            is_selected = selected_video == i
-            if st.button(f"{video['title']}\n{video['channel_name']} • {video['publish_date']}", key=f"card_{i}"):
-                st.session_state["selected_video"] = i
+    for video in videos:
+        if video['link'] in [v['link'] for v in not_relevant]:
+            continue
+        st.subheader(video["title"])
+        st.caption(f"{video['channel_name']} • {video['publish_date']}")
+        st.video(video["link"])
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
+                with st.spinner("Downloading..."):
+                    file_path, file_name = download_video(video["link"])
+                    with open(file_path, "rb") as file:
+                        st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4")
+        with col2:
+            if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
+                not_relevant.append(video)
+                save_not_relevant(not_relevant)
                 st.rerun()
-            if is_selected:
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                        file_path, file_name = download_video(video["link"])
-                        with open(file_path, "rb") as file:
-                            st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{video['link']}")
-                with col_b:
-                    if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
-                        not_relevant.append(video)
-                        save_not_relevant(not_relevant)
-                        st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        if selected_video is not None and selected_video < len(videos):
-            video = videos[selected_video]
-            st.markdown("### 📺 Preview")
-            st.subheader(video["title"])
-            st.caption(f"{video['channel_name']} • {video['publish_date']}")
-            st.video(video["link"])
 
 elif view == "🚫 Not Relevant":
     videos = load_not_relevant()
