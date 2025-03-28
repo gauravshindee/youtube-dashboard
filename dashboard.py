@@ -7,10 +7,8 @@ import yt_dlp
 import time
 import zipfile
 import requests
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
-from fetch_videos import fetch_all as fetch_videos_main
+from fetch_videos import fetch_all as fetch_videos_main  # Make sure fetch_videos.py has a main() function
 
 # --- GitHub ZIP URLs ---
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
@@ -63,39 +61,16 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
 os.makedirs("downloads", exist_ok=True)
 
 # --- File Paths ---
+DATA_FILE = "data/quickwatch.json"
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
-# --- Google Sheets Setup ---
-SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
-SHEET_NAME = "Sheet1"
-
-# Save secret to local file
-if not os.path.exists("gcp_credentials.json"):
-    with open("gcp_credentials.json", "w") as f:
-        f.write(st.secrets["gcp_service_account"])
-
-# Auth function for gspread
-def get_gsheet_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("gcp_credentials.json", scope)
-    return gspread.authorize(creds)
-
 def load_videos():
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    records = sheet.get_all_records()
-    return records
-
-def save_videos(data):
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    sheet.clear()
-    headers = list(data[0].keys())
-    sheet.append_row(headers)
-    for row in data:
-        sheet.append_row([row.get(h, "") for h in headers])
+    if not os.path.exists(DATA_FILE):
+        return []
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
 
 def load_not_relevant():
     if not os.path.exists(NOT_RELEVANT_FILE):
@@ -119,6 +94,58 @@ def download_video(video_url):
         ext = info.get("ext")
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
+
+# --- Archive View ---
+def archive_view(csv_path, label="Archive"):
+    if not os.path.exists(csv_path):
+        st.warning(f"{label} CSV not found.")
+        return
+
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
+    except UnicodeDecodeError:
+        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
+
+    df.columns = df.columns.str.strip().str.lower()
+    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+
+    st.subheader(f"📦 {label}")
+    st.markdown("### Filters")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        search_query = st.text_input("🔍 Search title", key=f"{label}_search")
+    with col2:
+        channel_names = df["channel_name"].dropna().unique().tolist()
+        selected_channel = st.selectbox("🎞 Channel", ["All"] + sorted(channel_names), key=f"{label}_channel")
+    with col3:
+        min_date = df["publish_date"].min().date()
+        max_date = df["publish_date"].max().date()
+        start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
+
+    filtered = df.copy()
+    if search_query:
+        filtered = filtered[filtered["title"].str.contains(search_query, case=False, na=False)]
+    if selected_channel != "All":
+        filtered = filtered[filtered["channel_name"] == selected_channel]
+    filtered = filtered[
+        (filtered["publish_date"].dt.date >= start_date) &
+        (filtered["publish_date"].dt.date <= end_date)
+    ]
+
+    st.markdown(f"**🔎 {len(filtered)} results found**")
+    st.markdown("---")
+
+    per_page = 10
+    total_pages = max((len(filtered) - 1) // per_page + 1, 1)
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key=f"{label}_page")
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    for _, row in filtered.iloc[start:end].iterrows():
+        st.subheader(row["title"])
+        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
+        st.video(row["video_link"])
+        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
 
 # --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
