@@ -7,6 +7,10 @@ import pandas as pd
 import yt_dlp
 import time
 
+# --- Move uploaded files to data/ ---
+uploaded_official = "archive.csv"
+uploaded_third_party = "archive_third_party.csv"
+
 if os.path.exists(uploaded_official):
     os.makedirs("data", exist_ok=True)
     os.rename(uploaded_official, "data/archive.csv")
@@ -14,7 +18,7 @@ if os.path.exists(uploaded_official):
 if os.path.exists(uploaded_third_party):
     os.makedirs("data", exist_ok=True)
     os.rename(uploaded_third_party, "data/archive_third_party.csv")
-
+    
 # --- Secure Login Setup ---
 CORRECT_PASSWORD = "DemoUp2025!"
 LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours
