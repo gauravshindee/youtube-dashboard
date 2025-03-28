@@ -177,23 +177,29 @@ if view == "⚡ QuickWatch":
     col1, col2 = st.columns([2, 3])
     with col1:
         st.markdown("### 🎥 Videos")
-        for vid in video_dict.values():
-            with st.container():
-                cols = st.columns([6, 2, 2])
-                with cols[0]:
-                    if st.button(vid["title"], key=f"select_{vid['video_id']}"):
+        with st.container():
+            st.markdown("<div style='max-height: 80vh; overflow-y: auto;'>", unsafe_allow_html=True)
+            for vid in video_dict.values():
+                with st.container():
+                    is_selected = selected_video_id == vid["video_id"]
+                    if st.button(" ", key=f"select_{vid['video_id']}", help="Click to preview", use_container_width=True):
                         st.session_state["selected_video_id"] = vid["video_id"]
-                with cols[1]:
-                    if st.button("⬇️ Download", key=f"dl_{vid['video_id']}"):
-                        with st.spinner("Downloading..."):
-                            file_path, file_name = download_video(vid["link"])
-                            with open(file_path, "rb") as file:
-                                st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{vid['video_id']}")
-                with cols[2]:
-                    if st.button("🚫 Not Relevant", key=f"nr_{vid['video_id']}"):
-                        not_relevant.append(vid)
-                        save_not_relevant(not_relevant)
-                        st.rerun()
+                    card = f"""
+                        <div style='border-radius:12px; border:2px solid {"#ffa07a" if is_selected else "#eee"}; padding:16px; margin-bottom:10px;'>
+                            <h5 style='margin-bottom:5px;'>{vid['title']}</h5>
+                            <p style='margin:0; font-size:0.9rem;'>{vid['channel_name']} • {vid['publish_date']}</p>
+                            <div style='display:flex; gap:10px; margin-top:10px;'>
+                                <form action='#' method='post'>
+                                    <input type='submit' value='⬇️ Download' style='padding:6px 12px;'>
+                                </form>
+                                <form action='#' method='post'>
+                                    <input type='submit' value='🚫 Not Relevant' style='padding:6px 12px;'>
+                                </form>
+                            </div>
+                        </div>
+                    """
+                    st.markdown(card, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         if selected_video_id and selected_video_id in video_dict:
