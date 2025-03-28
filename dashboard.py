@@ -2,12 +2,14 @@
 import streamlit as st
 import json
 import os
-import subprocess
 import pandas as pd
 import yt_dlp
 import time
 import zipfile
 import requests
+
+from fetch_videos import main as fetch_videos_main  # Make sure fetch_videos.py has a main() function
+
 
 # --- GitHub ZIP URLs ---
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
@@ -26,24 +28,20 @@ def download_and_extract_zip(url, extract_to):
     else:
         st.error(f"❌ Failed to download zip from {url}")
 
-# Make sure data folder exists
 os.makedirs("data", exist_ok=True)
 
-# Only download and extract if not already extracted
 if not os.path.exists("data/archive.csv"):
     download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
-
 if not os.path.exists("data/archive_third_party.csv"):
     download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
 
-# --- Secure Login Setup ---
+# --- Secure Login ---
 CORRECT_PASSWORD = "DemoUp2025!"
-LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours
+LOGIN_TIMEOUT = 4 * 60 * 60
 
 def authenticate():
     st.set_page_config(page_title="🔐 Secure Login", layout="centered")
     st.markdown("## 🔐 Welcome to DemoUp Dashboard")
-    st.write("Please enter the password to continue.")
     password = st.text_input("Password", type="password")
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
@@ -69,7 +67,6 @@ NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
-# --- Loaders
 def load_videos():
     if not os.path.exists(DATA_FILE):
         return []
@@ -115,7 +112,6 @@ def archive_view(csv_path, label="Archive"):
 
     st.subheader(f"📦 {label}")
     st.markdown("### Filters")
-
     col1, col2, col3 = st.columns(3)
     with col1:
         search_query = st.text_input("🔍 Search title", key=f"{label}_search")
@@ -132,10 +128,7 @@ def archive_view(csv_path, label="Archive"):
         filtered = filtered[filtered["title"].str.contains(search_query, case=False, na=False)]
     if selected_channel != "All":
         filtered = filtered[filtered["channel_name"] == selected_channel]
-    filtered = filtered[
-        (filtered["publish_date"].dt.date >= start_date) &
-        (filtered["publish_date"].dt.date <= end_date)
-    ]
+    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
 
     st.markdown(f"**🔎 {len(filtered)} results found**")
     st.markdown("---")
@@ -156,29 +149,26 @@ def archive_view(csv_path, label="Archive"):
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
 
-# Sidebar
+# --- Sidebar View ---
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
 
-# Views
 if view == "⚡ QuickWatch":
     with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
         password = st.text_input("Enter admin password to fetch new videos", type="password")
         if password == "demoup123":
             if st.button("🔁 Fetch New Videos Now"):
-                with st.spinner("Fetching videos... this may take up to 1–2 minutes..."):
-                    result = subprocess.run(["python3", "fetch_videos.py"], capture_output=True, text=True)
-                if result.returncode == 0:
-                    st.success("✅ Fetch completed successfully.")
-                    st.text(result.stdout)
-                    st.rerun()
-                else:
-                    st.error("❌ Fetch failed.")
-                    st.code(result.stderr or "Unknown error")
+                with st.spinner("Fetching videos..."):
+                    try:
+                        fetch_videos_main()
+                        st.success("✅ Fetch completed successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("❌ Fetch failed.")
+                        st.exception(e)
         elif password:
             st.error("❌ Incorrect password.")
 
     st.markdown("---")
-
     videos = load_videos()
     not_relevant = load_not_relevant()
 
