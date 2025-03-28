@@ -95,55 +95,6 @@ def download_video(video_url):
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
 
-# --- Archive View ---
-def archive_view(csv_path, label="Archive"):
-    if not os.path.exists(csv_path):
-        st.warning(f"{label} CSV not found.")
-        return
-
-    try:
-        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
-    except UnicodeDecodeError:
-        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
-
-    df.columns = df.columns.str.strip().str.lower()
-    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
-
-    st.subheader(f"📦 {label}")
-    st.markdown("### Filters")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        search_query = st.text_input("🔍 Search title", key=f"{label}_search")
-    with col2:
-        channel_names = df["channel_name"].dropna().unique().tolist()
-        selected_channel = st.selectbox("🎞 Channel", ["All"] + sorted(channel_names), key=f"{label}_channel")
-    with col3:
-        min_date = df["publish_date"].min().date()
-        max_date = df["publish_date"].max().date()
-        start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
-
-    filtered = df.copy()
-    if search_query:
-        filtered = filtered[filtered["title"].str.contains(search_query, case=False, na=False)]
-    if selected_channel != "All":
-        filtered = filtered[filtered["channel_name"] == selected_channel]
-    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
-
-    st.markdown(f"**🔎 {len(filtered)} results found**")
-    st.markdown("---")
-
-    per_page = 10
-    total_pages = max((len(filtered) - 1) // per_page + 1, 1)
-    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key=f"{label}_page")
-
-    start = (page - 1) * per_page
-    end = start + per_page
-    for _, row in filtered.iloc[start:end].iterrows():
-        st.subheader(row["title"])
-        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
-        st.video(row["video_link"])
-        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
-
 # --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
@@ -170,36 +121,36 @@ if view == "⚡ QuickWatch":
     st.markdown("---")
     videos = load_videos()
     not_relevant = load_not_relevant()
-
     selected_video_id = st.session_state.get("selected_video_id")
     video_dict = {v["video_id"]: v for v in videos if v['link'] not in [nv['link'] for nv in not_relevant]}
 
     col1, col2 = st.columns([2, 3])
     with col1:
         st.markdown("### 🎥 Videos")
-        with st.container():
-            st.markdown("<div style='max-height: 80vh; overflow-y: auto;'>", unsafe_allow_html=True)
-            for vid in video_dict.values():
-                with st.container():
-                    is_selected = selected_video_id == vid["video_id"]
-                    if st.button(" ", key=f"select_{vid['video_id']}", help="Click to preview", use_container_width=True):
-                        st.session_state["selected_video_id"] = vid["video_id"]
-                    card = f"""
-                        <div style='border-radius:12px; border:2px solid {"#ffa07a" if is_selected else "#eee"}; padding:16px; margin-bottom:10px;'>
-                            <h5 style='margin-bottom:5px;'>{vid['title']}</h5>
-                            <p style='margin:0; font-size:0.9rem;'>{vid['channel_name']} • {vid['publish_date']}</p>
-                            <div style='display:flex; gap:10px; margin-top:10px;'>
-                                <form action='#' method='post'>
-                                    <input type='submit' value='⬇️ Download' style='padding:6px 12px;'>
-                                </form>
-                                <form action='#' method='post'>
-                                    <input type='submit' value='🚫 Not Relevant' style='padding:6px 12px;'>
-                                </form>
-                            </div>
-                        </div>
-                    """
-                    st.markdown(card, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div style='max-height: 80vh; overflow-y: auto;'>", unsafe_allow_html=True)
+        for vid in video_dict.values():
+            card_clicked = st.button(
+                f"{vid['title']}\n{vid['channel_name']} • {vid['publish_date']}",
+                key=f"card_{vid['video_id']}",
+                help="Click to preview",
+                use_container_width=True
+            )
+            if card_clicked:
+                st.session_state["selected_video_id"] = vid["video_id"]
+            with st.container():
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    if st.button("⬇️ Download", key=f"dl_{vid['video_id']}"):
+                        with st.spinner("Downloading..."):
+                            file_path, file_name = download_video(vid["link"])
+                            with open(file_path, "rb") as file:
+                                st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{vid['video_id']}")
+                with btn_col2:
+                    if st.button("🚫 Not Relevant", key=f"nr_{vid['video_id']}"):
+                        not_relevant.append(vid)
+                        save_not_relevant(not_relevant)
+                        st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         if selected_video_id and selected_video_id in video_dict:
