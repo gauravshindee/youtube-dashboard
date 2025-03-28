@@ -6,7 +6,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # --- Config
 YT_API_KEYS = [
@@ -6040,35 +6040,31 @@ BRAND_CHANNELS = {
 }
 
 # --- Google Sheets Setup ---
-SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
-SHEET_NAME = "Sheet1"
 
-# Save secret to local file if not already present
-if not os.path.exists("gcp_credentials.json"):
-    with open("gcp_credentials.json", "w") as f:
-        f.write(os.environ.get("gcp_service_account", "{}"))
+GOOGLE_SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
+SHEET_NAME = "quickwatch"
+SERVICE_ACCOUNT_SECRET = json.loads(os.environ.get("gcp_service_account"))
 
-# Auth function for gspread
+# --- Google Sheet Setup
 def get_gsheet_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("gcp_credentials.json", scope)
+    creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_SECRET, scopes=scope)
     return gspread.authorize(creds)
 
 def load_existing_videos():
     client = get_gsheet_client()
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    return sheet.get_all_records()
+    sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
+    data = sheet.get_all_records()
+    return data
 
 def save_videos(data):
     client = get_gsheet_client()
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+    sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
     sheet.clear()
-    if not data:
-        return
     headers = list(data[0].keys())
     sheet.append_row(headers)
     for row in data:
-        sheet.append_row([row.get(h, "") for h in headers])
+        sheet.append_row([row[h] for h in headers])
 
 def get_recent_uploads(channel_id, api_key):
     base_url = "https://www.googleapis.com/youtube/v3/search"
@@ -6099,6 +6095,7 @@ def get_recent_uploads(channel_id, api_key):
         "link": f"https://www.youtube.com/watch?v={item['id']['videoId']}"
     } for item in items]
 
+# --- Main fetcher
 def fetch_all():
     existing = load_existing_videos()
     existing_ids = {v["video_id"] for v in existing}
@@ -6120,7 +6117,7 @@ def fetch_all():
                     if vid["video_id"] not in existing_ids:
                         new_videos.append(vid)
                         existing_ids.add(vid["video_id"])
-                break  # success, move to next channel
+                break
             except RuntimeError as e:
                 print(f"⚠️ API key {key_index+1} failed for {brand}: {e}")
                 key_index += 1
@@ -6129,7 +6126,8 @@ def fetch_all():
                 break
 
     combined = existing + new_videos
-    save_videos(combined)
+    if combined:
+        save_videos(combined)
     print(f"✅ Fetched {len(new_videos)} new videos. Total: {len(combined)}")
 
 if __name__ == "__main__":
