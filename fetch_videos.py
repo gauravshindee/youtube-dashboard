@@ -1,7 +1,9 @@
+# fetch_videos.py
 import os
 import json
 import requests
 from datetime import datetime, timedelta, timezone
+import pandas as pd
 
 # --- Config
 YT_API_KEYS = [
@@ -6034,7 +6036,6 @@ BRAND_CHANNELS = {
 "Touroll":"UCPQRkxa9gm49GMrD4riw5mg"
 }
 
-
 OUTPUT_FILE = "data/quickwatch.json"
 
 # --- Helpers
@@ -6077,7 +6078,7 @@ def get_recent_uploads(channel_id, api_key):
         "link": f"https://www.youtube.com/watch?v={item['id']['videoId']}"
     } for item in items]
 
-# --- Main fetcher
+# --- Main fetcher logic
 def fetch_all():
     existing = load_existing_videos()
     existing_ids = {v["video_id"] for v in existing}
@@ -6111,5 +6112,9 @@ def fetch_all():
     save_videos(combined)
     print(f"✅ Fetched {len(new_videos)} new videos. Total: {len(combined)}")
 
-if __name__ == "__main__":
+# --- Define main() for import compatibility ---
+def main():
     fetch_all()
+
+if __name__ == "__main__":
+    main()
