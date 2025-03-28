@@ -8,8 +8,7 @@ import time
 import zipfile
 import requests
 
-from fetch_videos import main as fetch_videos_main  # Make sure fetch_videos.py has a main() function
-
+from fetch_videos import fetch_all as fetch_videos_main
 
 # --- GitHub ZIP URLs ---
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
@@ -172,24 +171,37 @@ if view == "⚡ QuickWatch":
     videos = load_videos()
     not_relevant = load_not_relevant()
 
-    for video in videos:
-        if video['link'] in [v['link'] for v in not_relevant]:
-            continue
-        st.subheader(video["title"])
-        st.caption(f"{video['channel_name']} • {video['publish_date']}")
-        st.video(video["link"])
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                with st.spinner("Downloading..."):
-                    file_path, file_name = download_video(video["link"])
-                    with open(file_path, "rb") as file:
-                        st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4")
-        with col2:
-            if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
-                not_relevant.append(video)
-                save_not_relevant(not_relevant)
-                st.rerun()
+    selected_video_id = st.session_state.get("selected_video_id")
+    video_dict = {v["video_id"]: v for v in videos if v['link'] not in [nv['link'] for nv in not_relevant]}
+
+    col1, col2 = st.columns([2, 3])
+    with col1:
+        st.markdown("### 🎥 Videos")
+        for vid in video_dict.values():
+            with st.container():
+                cols = st.columns([6, 2, 2])
+                with cols[0]:
+                    if st.button(vid["title"], key=f"select_{vid['video_id']}"):
+                        st.session_state["selected_video_id"] = vid["video_id"]
+                with cols[1]:
+                    if st.button("⬇️ Download", key=f"dl_{vid['video_id']}"):
+                        with st.spinner("Downloading..."):
+                            file_path, file_name = download_video(vid["link"])
+                            with open(file_path, "rb") as file:
+                                st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{vid['video_id']}")
+                with cols[2]:
+                    if st.button("🚫 Not Relevant", key=f"nr_{vid['video_id']}"):
+                        not_relevant.append(vid)
+                        save_not_relevant(not_relevant)
+                        st.rerun()
+
+    with col2:
+        if selected_video_id and selected_video_id in video_dict:
+            video = video_dict[selected_video_id]
+            st.markdown("### 📺 Video Preview")
+            st.subheader(video["title"])
+            st.caption(f"{video['channel_name']} • {video['publish_date']}")
+            st.video(video["link"])
 
 elif view == "🚫 Not Relevant":
     videos = load_not_relevant()
