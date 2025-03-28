@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+import streamlit as st
+from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Config
 YT_API_KEYS = [
@@ -6047,8 +6049,12 @@ SERVICE_ACCOUNT_SECRET = json.loads(os.environ.get("gcp_service_account"))
 
 # --- Google Sheet Setup
 def get_gsheet_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_SECRET, scopes=scope)
+    credentials_dict = json.loads(st.secrets["gcp_service_account"])
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
     return gspread.authorize(creds)
 
 def load_existing_videos():
