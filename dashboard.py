@@ -36,22 +36,6 @@ os.makedirs("data", exist_ok=True)
 os.makedirs("downloads", exist_ok=True)
 
 # --- File Paths ---
-st.markdown("### Upload your CSV files to save them")
-
-uploaded_official = st.file_uploader("Upload Archive (Official)", type="csv")
-if uploaded_official is not None:
-    with open("data/archive.csv", "wb") as f:
-        f.write(uploaded_official.getbuffer())
-    st.success("✅ archive.csv saved!")
-
-uploaded_third_party = st.file_uploader("Upload Archive (Third-Party)", type="csv")
-if uploaded_third_party is not None:
-    with open("data/archive_third_party.csv", "wb") as f:
-        f.write(uploaded_third_party.getbuffer())
-    st.success("✅ archive_third_party.csv saved!")
-# --- File Paths ---
-
-# --- File Paths ---
 DATA_FILE = "data/quickwatch.json"
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
