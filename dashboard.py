@@ -132,16 +132,6 @@ view = st.sidebar.radio("📂 Select View", [
     "📦 Archive (Third-Party)"
 ])
 
-# Upload CSV
-st.sidebar.markdown("### 📁 Upload Archive CSV")
-upload_type = st.sidebar.selectbox("Select upload target", ["Archive (Official)", "Archive (Third-Party)"])
-uploaded_file = st.sidebar.file_uploader("Upload CSV file", type="csv")
-if uploaded_file:
-    target_path = ARCHIVE_FILE if upload_type == "Archive (Official)" else ARCHIVE_THIRD_PARTY_FILE
-    with open(target_path, "wb") as f:
-        f.write(uploaded_file.read())
-    st.sidebar.success(f"{upload_type} CSV uploaded and saved!")
-
 # --- View Renderers ---
 if view == "⚡ QuickWatch":
     with st.expander("📡 Manual Fetch (Admin Only)"):
