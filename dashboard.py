@@ -1,4 +1,3 @@
-
 # dashboard.py
 import streamlit as st
 import json
@@ -44,6 +43,16 @@ NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
+# --- Admin CSV Upload ---
+st.sidebar.markdown("### 🛠 Admin: Upload CSV")
+uploaded_file = st.sidebar.file_uploader("Upload archive.csv", type=["csv"])
+if uploaded_file:
+    save_path = st.sidebar.selectbox("Save file as:", ["archive.csv", "archive_third_party.csv"])
+    full_path = os.path.join("data", save_path)
+    with open(full_path, "wb") as f:
+        f.write(uploaded_file.read())
+    st.sidebar.success(f"✅ Uploaded and saved to {full_path}")
+
 # --- Data Loaders ---
 def load_videos():
     if not os.path.exists(DATA_FILE):
@@ -81,11 +90,7 @@ def archive_view(csv_path, label="Archive"):
         st.warning(f"{label} CSV not found.")
         return
 
-    try:
-        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
-    except UnicodeDecodeError:
-        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
-
+    df = pd.read_csv(csv_path, encoding_errors="replace", on_bad_lines="skip")
     df.columns = df.columns.str.strip().str.lower()
 
     st.subheader(f"📦 {label}")
@@ -100,14 +105,14 @@ def archive_view(csv_path, label="Archive"):
     # Channel filter
     with col2:
         channel_names = df["channel_name"].dropna().unique().tolist()
-        selected_channel = st.selectbox("🎞 Filter by channel", ["All"] + sorted(channel_names), key=f"{label}_channel")
+        selected_channel = st.selectbox("🎮 Filter by channel", ["All"] + sorted(channel_names), key=f"{label}_channel")
 
     # Date range filter
     with col3:
         df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
         min_date = df["publish_date"].min().date()
         max_date = df["publish_date"].max().date()
-        start_date, end_date = st.date_input("📅 Publish Date Range", [min_date, max_date], key=f"{label}_date")
+        start_date, end_date = st.date_input("🗓️ Publish Date Range", [min_date, max_date], key=f"{label}_date")
 
     filtered = df.copy()
 
@@ -127,7 +132,7 @@ def archive_view(csv_path, label="Archive"):
 
     # Pagination
     per_page = 10
-    total_pages = max((len(filtered) - 1) // per_page + 1, 1)
+    total_pages = (len(filtered) - 1) // per_page + 1
     page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key=f"{label}_page")
 
     start = (page - 1) * per_page
@@ -193,6 +198,7 @@ if view == "⚡ QuickWatch":
                             file_name=file_name,
                             mime="video/mp4"
                         )
+
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
                 not_relevant.append(video)
