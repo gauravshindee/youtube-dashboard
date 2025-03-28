@@ -11,10 +11,6 @@ import time
 CORRECT_PASSWORD = "DemoUp2025!"
 LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours
 
-# --- Move uploaded files to data/ ---
-uploaded_official = "archive.csv"
-uploaded_third_party = "archive_third_party.csv"
-
 def authenticate():
     st.set_page_config(page_title="🔐 Secure Login", layout="centered")
     st.markdown("## 🔐 Welcome to DemoUp Dashboard")
