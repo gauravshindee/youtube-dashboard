@@ -15,6 +15,7 @@ from fetch_videos import fetch_all as fetch_videos_main
 # --- Google Sheets Setup ---
 GOOGLE_SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
 SHEET_NAME = "quickwatch"
+DOWNLOAD_TAB_NAME = "downloaded_movie_id"
 SERVICE_ACCOUNT_SECRET = json.loads(st.secrets["gcp_service_account"])
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -92,6 +93,18 @@ def save_not_relevant(data):
     with open(NOT_RELEVANT_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+def save_movie_id_to_sheet(movie_id):
+    try:
+        sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
+        try:
+            sheet = sh.worksheet(DOWNLOAD_TAB_NAME)
+        except gspread.exceptions.WorksheetNotFound:
+            sheet = sh.add_worksheet(title=DOWNLOAD_TAB_NAME, rows="1000", cols="1")
+            sheet.update("A1", [["movie_id"]])
+        sheet.append_row([movie_id])
+    except Exception as e:
+        st.error(f"Failed to save Movie ID: {e}")
+
 def download_video(video_url):
     ydl_opts = {
         "format": "best[ext=mp4]/best",
@@ -137,10 +150,7 @@ def archive_view(csv_path, label="Archive"):
         filtered = filtered[filtered["title"].str.contains(search_query, case=False, na=False)]
     if selected_channel != "All":
         filtered = filtered[filtered["channel_name"] == selected_channel]
-    filtered = filtered[
-        (filtered["publish_date"].dt.date >= start_date) &
-        (filtered["publish_date"].dt.date <= end_date)
-    ]
+    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
 
     st.markdown(f"**🔎 {len(filtered)} results found**")
     st.markdown("---")
@@ -196,7 +206,15 @@ if view == "⚡ QuickWatch":
                 with st.spinner("Downloading..."):
                     file_path, file_name = download_video(video["link"])
                     with open(file_path, "rb") as file:
-                        st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4")
+                        with st.modal("💾 Enter DemoUp Movie ID", key=f"modal_{video['link']}"):
+                            st.markdown("### 💾 Save Movie ID")
+                            movie_id = st.text_input("Enter numeric DemoUp Movie ID", key=f"id_{video['link']}")
+                            if movie_id and not movie_id.isnumeric():
+                                st.error("Only numbers are allowed.")
+                            elif movie_id and st.button("Save ID", key=f"save_{video['link']}"):
+                                save_movie_id_to_sheet(movie_id)
+                                st.success("Saved to Google Sheet.")
+                                st.download_button("📥 Download Video", data=file, file_name=file_name, mime="video/mp4")
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
                 not_relevant.append(video)
