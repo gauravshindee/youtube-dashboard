@@ -1,9 +1,12 @@
+
 # fetch_videos.py
 import os
 import json
 import requests
 from datetime import datetime, timedelta, timezone
 import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Config
 YT_API_KEYS = [
@@ -6036,18 +6039,36 @@ BRAND_CHANNELS = {
 "Touroll":"UCPQRkxa9gm49GMrD4riw5mg"
 }
 
-OUTPUT_FILE = "data/quickwatch.json"
+# --- Google Sheets Setup ---
+SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
+SHEET_NAME = "Sheet1"
 
-# --- Helpers
+# Save secret to local file if not already present
+if not os.path.exists("gcp_credentials.json"):
+    with open("gcp_credentials.json", "w") as f:
+        f.write(os.environ.get("gcp_service_account", "{}"))
+
+# Auth function for gspread
+def get_gsheet_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("gcp_credentials.json", scope)
+    return gspread.authorize(creds)
+
 def load_existing_videos():
-    if not os.path.exists(OUTPUT_FILE):
-        return []
-    with open(OUTPUT_FILE, "r") as f:
-        return json.load(f)
+    client = get_gsheet_client()
+    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+    return sheet.get_all_records()
 
 def save_videos(data):
-    with open(OUTPUT_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    client = get_gsheet_client()
+    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+    sheet.clear()
+    if not data:
+        return
+    headers = list(data[0].keys())
+    sheet.append_row(headers)
+    for row in data:
+        sheet.append_row([row.get(h, "") for h in headers])
 
 def get_recent_uploads(channel_id, api_key):
     base_url = "https://www.googleapis.com/youtube/v3/search"
@@ -6078,7 +6099,6 @@ def get_recent_uploads(channel_id, api_key):
         "link": f"https://www.youtube.com/watch?v={item['id']['videoId']}"
     } for item in items]
 
-# --- Main fetcher logic
 def fetch_all():
     existing = load_existing_videos()
     existing_ids = {v["video_id"] for v in existing}
@@ -6087,7 +6107,7 @@ def fetch_all():
     channels = list(BRAND_CHANNELS.items())
     key_index = 0
 
-    for i, (brand, channel_id) in enumerate(channels):
+    for brand, channel_id in channels:
         if key_index >= len(YT_API_KEYS):
             print("❌ All API keys exhausted.")
             break
@@ -6106,15 +6126,11 @@ def fetch_all():
                 key_index += 1
             except Exception as e:
                 print(f"⚠️ Error fetching from {brand}: {e}")
-                break  # move on to next channel
+                break
 
     combined = existing + new_videos
     save_videos(combined)
     print(f"✅ Fetched {len(new_videos)} new videos. Total: {len(combined)}")
 
-# --- Define main() for import compatibility ---
-def main():
-    fetch_all()
-
 if __name__ == "__main__":
-    main()
+    fetch_all()
