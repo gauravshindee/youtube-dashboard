@@ -9,23 +9,36 @@ import time
 import zipfile
 import requests
 
-# --- Constants for ZIP download ---
-RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/data/archive.csv.zip"
-RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/data/archive_third_party.csv.zip"
+# --- GitHub ZIP URLs ---
+RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
+RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
 
+# --- Download and extract if not already present ---
 def download_and_extract_zip(url, extract_to):
-    local_zip = os.path.join("data", os.path.basename(url))
-    if not os.path.exists(extract_to):
-        response = requests.get(url)
-        with open(local_zip, "wb") as f:
-            f.write(response.content)
-        with zipfile.ZipFile(local_zip, "r") as zip_ref:
+    zip_path = "temp.zip"
+    r = requests.get(url)
+    if r.status_code == 200:
+        with open(zip_path, "wb") as f:
+            f.write(r.content)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall("data")
-        os.remove(local_zip)
+        os.remove(zip_path)
+    else:
+        st.error(f"❌ Failed to download zip from {url}")
+
+# Make sure data folder exists
+os.makedirs("data", exist_ok=True)
+
+# Only download and extract if not already extracted
+if not os.path.exists("data/archive.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
+
+if not os.path.exists("data/archive_third_party.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
 
 # --- Secure Login Setup ---
 CORRECT_PASSWORD = "DemoUp2025!"
-LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours in seconds
+LOGIN_TIMEOUT = 4 * 60 * 60  # 4 hours
 
 def authenticate():
     st.set_page_config(page_title="🔐 Secure Login", layout="centered")
@@ -38,23 +51,17 @@ def authenticate():
         st.success("Access granted. Loading dashboard...")
         st.rerun()
     elif password:
-        st.error("❌ Incorrect password. Try again.")
+        st.error("❌ Incorrect password.")
 
 auth_time = st.session_state.get("login_time", 0)
 time_since_login = time.time() - auth_time
-
 if "authenticated" not in st.session_state or not st.session_state["authenticated"] or time_since_login > LOGIN_TIMEOUT:
     st.session_state["authenticated"] = False
     authenticate()
     st.stop()
 
-# --- Setup Directories and ZIP extraction ---
-os.makedirs("data", exist_ok=True)
+# --- Setup Directories ---
 os.makedirs("downloads", exist_ok=True)
-
-# Automatically download and unzip CSVs if missing
-download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data/archive.csv")
-download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data/archive_third_party.csv")
 
 # --- File Paths ---
 DATA_FILE = "data/quickwatch.json"
@@ -62,7 +69,7 @@ NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
-# --- Data Loaders ---
+# --- Loaders
 def load_videos():
     if not os.path.exists(DATA_FILE):
         return []
@@ -92,7 +99,7 @@ def download_video(video_url):
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
 
-# --- Archive View Logic ---
+# --- Archive View ---
 def archive_view(csv_path, label="Archive"):
     if not os.path.exists(csv_path):
         st.warning(f"{label} CSV not found.")
@@ -152,6 +159,7 @@ st.title("📺 YouTube Video Dashboard")
 # Sidebar
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
 
+# Views
 if view == "⚡ QuickWatch":
     with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
         password = st.text_input("Enter admin password to fetch new videos", type="password")
@@ -177,15 +185,13 @@ if view == "⚡ QuickWatch":
     for video in videos:
         if video['link'] in [v['link'] for v in not_relevant]:
             continue
-
         st.subheader(video["title"])
         st.caption(f"{video['channel_name']} • {video['publish_date']}")
         st.video(video["link"])
-
         col1, col2 = st.columns(2)
         with col1:
             if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                with st.spinner("Downloading video..."):
+                with st.spinner("Downloading..."):
                     file_path, file_name = download_video(video["link"])
                     with open(file_path, "rb") as file:
                         st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4")
