@@ -1,3 +1,4 @@
+
 # dashboard.py
 import streamlit as st
 import json
@@ -6,7 +7,6 @@ import subprocess
 import pandas as pd
 import yt_dlp
 import time
-import sys
 
 # --- Secure Login Setup ---
 CORRECT_PASSWORD = "DemoUp2025!"
@@ -42,6 +42,7 @@ os.makedirs("downloads", exist_ok=True)
 DATA_FILE = "data/quickwatch.json"
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
+ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
 # --- Data Loaders ---
 def load_videos():
@@ -74,23 +75,86 @@ def download_video(video_url):
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
 
+# --- Archive View Logic ---
+def archive_view(csv_path, label="Archive"):
+    if not os.path.exists(csv_path):
+        st.warning(f"{label} CSV not found.")
+        return
+
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
+    except UnicodeDecodeError:
+        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
+
+    df.columns = df.columns.str.strip().str.lower()
+
+    st.subheader(f"📦 {label}")
+    st.markdown("### Filters")
+
+    col1, col2, col3 = st.columns(3)
+
+    # Title search
+    with col1:
+        search_query = st.text_input(f"🔍 Search by title", key=f"{label}_search")
+
+    # Channel filter
+    with col2:
+        channel_names = df["channel_name"].dropna().unique().tolist()
+        selected_channel = st.selectbox("🎞 Filter by channel", ["All"] + sorted(channel_names), key=f"{label}_channel")
+
+    # Date range filter
+    with col3:
+        df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+        min_date = df["publish_date"].min().date()
+        max_date = df["publish_date"].max().date()
+        start_date, end_date = st.date_input("📅 Publish Date Range", [min_date, max_date], key=f"{label}_date")
+
+    filtered = df.copy()
+
+    if search_query:
+        filtered = filtered[filtered["title"].str.contains(search_query, case=False, na=False)]
+
+    if selected_channel != "All":
+        filtered = filtered[filtered["channel_name"] == selected_channel]
+
+    filtered = filtered[
+        (filtered["publish_date"].dt.date >= start_date) &
+        (filtered["publish_date"].dt.date <= end_date)
+    ]
+
+    st.markdown(f"**🔎 {len(filtered)} results found**")
+    st.markdown("---")
+
+    # Pagination
+    per_page = 10
+    total_pages = max((len(filtered) - 1) // per_page + 1, 1)
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key=f"{label}_page")
+
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    for _, row in filtered.iloc[start:end].iterrows():
+        st.subheader(row["title"])
+        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
+        st.video(row["video_link"])
+        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
+
 # --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
-st.title("📺 Content Team | YouTube Video Dashboard")
+st.title("📺 YouTube Video Dashboard")
 
 # Sidebar
-view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive"])
+view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
 
 # --- Views ---
 if view == "⚡ QuickWatch":
-    # Admin Manual Fetch
-    with st.expander("📡 Run Manual Video Fetch (Content Manager Only)"):
+    with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
         password = st.text_input("Enter admin password to fetch new videos", type="password")
         if password == "demoup123":
             if st.button("🔁 Fetch New Videos Now"):
                 with st.spinner("Fetching videos... this may take up to 1–2 minutes..."):
                     result = subprocess.run(
-                        [sys.executable, "fetch_videos.py"],
+                        ["python3", "fetch_videos.py"],
                         capture_output=True,
                         text=True
                     )
@@ -129,7 +193,6 @@ if view == "⚡ QuickWatch":
                             file_name=file_name,
                             mime="video/mp4"
                         )
-
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
                 not_relevant.append(video)
@@ -146,29 +209,8 @@ elif view == "🚫 Not Relevant":
             st.caption(f"{video['channel_name']} • {video['publish_date']}")
             st.video(video["link"])
 
-elif view == "📦 Archive":
-    if not os.path.exists(ARCHIVE_FILE):
-        st.warning("Archive CSV not found.")
-    else:
-        df = pd.read_csv(ARCHIVE_FILE, encoding="utf-8", on_bad_lines="skip")
-        df.columns = df.columns.str.strip().str.lower()  # Clean headers
+elif view == "📦 Archive (Official)":
+    archive_view(ARCHIVE_FILE, label="Archive (Official)")
 
-        # --- Search Bar
-        search_query = st.text_input("🔍 Search title or channel", "")
-        if search_query:
-            df = df[df["title"].str.contains(search_query, case=False, na=False) |
-                    df["channel_name"].str.contains(search_query, case=False, na=False)]
-
-        # --- Pagination
-        per_page = 10
-        total_pages = (len(df) - 1) // per_page + 1
-        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1)
-
-        start = (page - 1) * per_page
-        end = start + per_page
-
-        for _, row in df.iloc[start:end].iterrows():
-            st.subheader(row["title"])
-            st.caption(f"{row['channel_name']} • {row['publish_date']}")
-            st.video(row["video_link"])
-            st.button("⬇️ Download", key=f"dl_{row['video_link']}")
+elif view == "📦 Archive (Third-Party)":
+    archive_view(ARCHIVE_THIRD_PARTY_FILE, label="Archive (Third-Party)")
