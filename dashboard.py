@@ -8,7 +8,7 @@ import time
 import zipfile
 import requests
 
-from fetch_videos import fetch_all as fetch_videos_main  # Make sure fetch_videos.py has a main() function
+from fetch_videos import fetch_all as fetch_videos_main  # Updated import to match the refactored fetcher
 
 # --- GitHub ZIP URLs ---
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
@@ -61,16 +61,13 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
 os.makedirs("downloads", exist_ok=True)
 
 # --- File Paths ---
-DATA_FILE = "data/quickwatch.json"
+DATA_FILE = "data/quickwatch.json"  # Deprecated in favor of GSheet but kept for compatibility
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
 def load_videos():
-    if not os.path.exists(DATA_FILE):
-        return []
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+    return []  # Deprecated: use GSheet instead
 
 def load_not_relevant():
     if not os.path.exists(NOT_RELEVANT_FILE):
@@ -171,27 +168,7 @@ if view == "⚡ QuickWatch":
             st.error("❌ Incorrect password.")
 
     st.markdown("---")
-    videos = load_videos()
-    not_relevant = load_not_relevant()
-
-    for video in videos:
-        if video['link'] in [v['link'] for v in not_relevant]:
-            continue
-        st.subheader(video["title"])
-        st.caption(f"{video['channel_name']} • {video['publish_date']}")
-        st.video(video["link"])
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                with st.spinner("Downloading..."):
-                    file_path, file_name = download_video(video["link"])
-                    with open(file_path, "rb") as file:
-                        st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4")
-        with col2:
-            if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
-                not_relevant.append(video)
-                save_not_relevant(not_relevant)
-                st.rerun()
+    st.info("⚠️ QuickWatch data is now stored in Google Sheets. Display logic to be implemented.")
 
 elif view == "🚫 Not Relevant":
     videos = load_not_relevant()
