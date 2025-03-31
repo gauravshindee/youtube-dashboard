@@ -1,14 +1,11 @@
-
 # fetch_videos.py
 import os
 import json
 import requests
 from datetime import datetime, timedelta, timezone
-import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
-import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
+import streamlit as st
 
 # --- Config
 YT_API_KEYS = [
@@ -6042,35 +6039,32 @@ BRAND_CHANNELS = {
 }
 
 # --- Google Sheets Setup ---
-
 GOOGLE_SHEET_ID = "1VULPPJEhAtgdZE3ocWeAXsUVZFL7iGGC5TdyrBgKjzY"
 SHEET_NAME = "quickwatch"
 SERVICE_ACCOUNT_SECRET = json.loads(os.environ.get("gcp_service_account"))
 
 # --- Google Sheet Setup
+
 def get_gsheet_client():
-    credentials_dict = json.loads(st.secrets["gcp_service_account"])
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_SECRET, scope)
     return gspread.authorize(creds)
 
 def load_existing_videos():
     client = get_gsheet_client()
     sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
-    data = sheet.get_all_records()
-    return data
+    return sheet.get_all_records()
 
 def save_videos(data):
     client = get_gsheet_client()
     sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
     sheet.clear()
     headers = list(data[0].keys())
-    sheet.append_row(headers)
-    for row in data:
-        sheet.append_row([row[h] for h in headers])
+    rows = [headers] + [[row[h] for h in headers] for row in data]
+    sheet.update(f"A1:{chr(65 + len(headers) - 1)}{len(rows)}", rows)
 
 def get_recent_uploads(channel_id, api_key):
     base_url = "https://www.googleapis.com/youtube/v3/search"
@@ -6102,6 +6096,7 @@ def get_recent_uploads(channel_id, api_key):
     } for item in items]
 
 # --- Main fetcher
+
 def fetch_all():
     existing = load_existing_videos()
     existing_ids = {v["video_id"] for v in existing}
