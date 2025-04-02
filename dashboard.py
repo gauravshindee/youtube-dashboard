@@ -140,6 +140,7 @@ def download_video(video_url):
         "format": "best[ext=mp4]",
         "outtmpl": "downloads/%(id)s.%(ext)s",
         "quiet": True,
+        "cookiefile": "cookies.txt",  # 👈 This enables login session
     }
 
     try:
