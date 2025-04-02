@@ -8,6 +8,7 @@ import time
 import zipfile
 import requests
 import gspread
+import subprocess
 from oauth2client.service_account import ServiceAccountCredentials
 
 from fetch_videos import fetch_all as fetch_videos_main
@@ -136,20 +137,32 @@ def move_to_not_relevant(video):
 os.makedirs("downloads", exist_ok=True)
 
 def download_video(video_url):
-    ydl_opts = {
-        "format": "best[ext=mp4]",
-        "outtmpl": "downloads/%(id)s.%(ext)s",
-        "quiet": True,
-        "cookiefile": "cookies.txt",  # 👈 This enables login session
-    }
-
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            file_path = f"downloads/{info['id']}.{info['ext']}"
-            return file_path, f"{info['id']}.{info['ext']}", info["id"]
+        # Write the video URL to links.txt
+        with open("links.txt", "w") as f:
+            f.write(video_url + "\n")
+
+        # Call the download.sh script
+        result = subprocess.run(["bash", "download.sh"], capture_output=True, text=True)
+
+        if result.returncode != 0:
+            st.error(f"❌ Download failed: {result.stderr}")
+            return None, None, None
+
+        # Parse output file name from script logs
+        lines = result.stdout.strip().split("\n")
+        for line in lines:
+            if line.strip().startswith("[download] Destination:"):
+                file_path = line.strip().split(": ", 1)[1]
+                file_name = os.path.basename(file_path)
+                video_id, ext = os.path.splitext(file_name)
+                return file_path, file_name, video_id
+
+        st.error("❌ Could not determine downloaded file name.")
+        return None, None, None
+
     except Exception as e:
-        st.error(f"❌ Download failed: {str(e)}")
+        st.error(f"❌ Download error: {str(e)}")
         return None, None, None
 
 # --- Archive View ---
