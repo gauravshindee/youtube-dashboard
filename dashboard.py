@@ -138,31 +138,22 @@ os.makedirs("downloads", exist_ok=True)
 
 def download_video(video_url):
     try:
-        # Write the video URL to links.txt
-        with open("links.txt", "w") as f:
-            f.write(video_url + "\n")
-
-        # Call the download.sh script
-        result = subprocess.run(["bash", "download.sh"], capture_output=True, text=True)
-
+        result = subprocess.run(
+            ["bash", "download.sh", video_url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd="data"
+        )
         if result.returncode != 0:
-            st.error(f"❌ Download failed: {result.stderr}")
+            st.error(f"❌ Download failed:\n{result.stderr}")
             return None, None, None
 
-        # Parse output file name from script logs
-        lines = result.stdout.strip().split("\n")
-        for line in lines:
-            if line.strip().startswith("[download] Destination:"):
-                file_path = line.strip().split(": ", 1)[1]
-                file_name = os.path.basename(file_path)
-                video_id, ext = os.path.splitext(file_name)
-                return file_path, file_name, video_id
-
-        st.error("❌ Could not determine downloaded file name.")
-        return None, None, None
-
+        downloaded_file = result.stdout.strip().splitlines()[-1]  # Last line = filename
+        full_path = os.path.join("data", downloaded_file)
+        return full_path, downloaded_file, os.path.splitext(downloaded_file)[0]  # file_id
     except Exception as e:
-        st.error(f"❌ Download error: {str(e)}")
+        st.error(f"❌ Download failed: {e}")
         return None, None, None
 
 # --- Archive View ---
