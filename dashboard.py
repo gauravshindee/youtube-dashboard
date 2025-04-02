@@ -193,3 +193,11 @@ elif view == "🚫 Not Relevant":
             st.subheader(video["title"])
             st.caption(f"{video['channel_name']} • {video['publish_date']}")
             st.video(video["link"])
+
+
+# --- Archive Views ---
+elif view == "📦 Archive (Official)":
+    st.info("Coming soon: Official Archive View")
+
+elif view == "📦 Archive (Third-Party)":
+    st.info("Coming soon: Third-Party Archive View")
