@@ -137,7 +137,7 @@ os.makedirs("downloads", exist_ok=True)
 
 def download_video(video_url):
     ydl_opts = {
-        "format": "bestvideo+bestaudio/best",
+        "format": "best[ext=mp4]",
         "outtmpl": "downloads/%(id)s.%(ext)s",
         "quiet": True,
     }
