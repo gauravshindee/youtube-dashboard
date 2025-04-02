@@ -194,7 +194,15 @@ if view == "⚡ QuickWatch":
     videos = load_quickwatch_from_gsheet()
     not_relevant = load_not_relevant()
 
-    for video in videos:
+    if "quickwatch_offset" not in st.session_state:
+        st.session_state.quickwatch_offset = 0
+
+    offset = st.session_state.quickwatch_offset
+    videos_per_page = 10
+
+    visible_videos = videos[offset: offset + videos_per_page]
+
+    for video in visible_videos:
         if video['link'] in [v['link'] for v in not_relevant]:
             continue
         st.subheader(video["title"])
@@ -203,20 +211,28 @@ if view == "⚡ QuickWatch":
         col1, col2 = st.columns(2)
         with col1:
             if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                movie_id = st.text_input("Enter DemoUp Movie ID (numbers only)", key=f"movie_id_{video['link']}")
-                if movie_id and not movie_id.isnumeric():
-                    st.error("Only numbers are allowed.")
-                elif movie_id:
-                    save_movie_id_to_sheet(movie_id)
-                    with st.spinner("Downloading..."):
-                        file_path, file_name = download_video(video["link"])
-                        with open(file_path, "rb") as file:
-                            st.download_button("📥 Save", data=file, file_name=file_name, mime="video/mp4", key=f"save_{video['link']}")
+                with st.spinner("Downloading..."):
+                    file_path, file_name = download_video(video["link"])
+                    with open(file_path, "rb") as file:
+                        with st.modal("💾 Enter DemoUp Movie ID"):
+                            st.markdown("### 💾 Save Movie ID")
+                            movie_id = st.text_input("Enter numeric DemoUp Movie ID", key=f"id_{video['link']}")
+                            if movie_id and not movie_id.isnumeric():
+                                st.error("Only numbers are allowed.")
+                            elif movie_id and st.button("Save ID", key=f"save_{video['link']}"):
+                                save_movie_id_to_sheet(movie_id)
+                                st.success("Saved to Google Sheet.")
+                                st.download_button("📥 Download Video", data=file, file_name=file_name, mime="video/mp4")
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['link']}"):
                 not_relevant.append(video)
                 save_not_relevant(not_relevant)
                 st.rerun()
+
+    if offset + videos_per_page < len(videos):
+        if st.button("⬇️ Load more videos"):
+            st.session_state.quickwatch_offset += videos_per_page
+            st.rerun()
 
 elif view == "🚫 Not Relevant":
     videos = load_not_relevant()
