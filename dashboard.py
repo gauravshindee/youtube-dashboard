@@ -9,7 +9,6 @@ import zipfile
 import requests
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-
 from fetch_videos import fetch_all as fetch_videos_main
 
 # --- Google Sheets Setup ---
@@ -26,7 +25,6 @@ gs_client = gspread.authorize(credentials)
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
 RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
 
-# --- Download and extract if not already present ---
 def download_and_extract_zip(url, extract_to):
     zip_path = "temp.zip"
     r = requests.get(url)
@@ -40,13 +38,12 @@ def download_and_extract_zip(url, extract_to):
         st.error(f"❌ Failed to download zip from {url}")
 
 os.makedirs("data", exist_ok=True)
-
 if not os.path.exists("data/archive.csv"):
     download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
 if not os.path.exists("data/archive_third_party.csv"):
     download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
 
-# --- Secure Login ---
+# --- Auth ---
 CORRECT_PASSWORD = "DemoUp2025!"
 LOGIN_TIMEOUT = 4 * 60 * 60
 
@@ -69,19 +66,16 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     authenticate()
     st.stop()
 
-# --- Setup Directories ---
+# --- Setup ---
 os.makedirs("downloads", exist_ok=True)
-
-# --- File Paths ---
 NOT_RELEVANT_FILE = "data/not_relevant.json"
 ARCHIVE_FILE = "data/archive.csv"
 ARCHIVE_THIRD_PARTY_FILE = "data/archive_third_party.csv"
 
-# --- Loaders ---
+# --- Helpers ---
 def load_quickwatch_from_gsheet():
     sheet = gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
-    records = sheet.get_all_records()
-    return records
+    return sheet.get_all_records()
 
 def load_not_relevant():
     if not os.path.exists(NOT_RELEVANT_FILE):
@@ -118,7 +112,6 @@ def download_video(video_url):
         file_path = f"downloads/{video_id}.{ext}"
         return file_path, f"{video_id}.{ext}"
 
-# --- Archive View ---
 def archive_view(csv_path, label="Archive"):
     if not os.path.exists(csv_path):
         st.warning(f"{label} CSV not found.")
@@ -167,11 +160,10 @@ def archive_view(csv_path, label="Archive"):
         st.video(row["video_link"])
         st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
 
-# --- UI Config ---
+# --- UI ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
 
-# --- Sidebar View ---
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
 
 if view == "⚡ QuickWatch":
@@ -194,12 +186,12 @@ if view == "⚡ QuickWatch":
     videos = load_quickwatch_from_gsheet()
     not_relevant = load_not_relevant()
 
+    # --- Lazy Loading Setup ---
     if "quickwatch_offset" not in st.session_state:
         st.session_state.quickwatch_offset = 0
 
-    offset = st.session_state.quickwatch_offset
     videos_per_page = 10
-
+    offset = st.session_state.quickwatch_offset
     visible_videos = videos[offset: offset + videos_per_page]
 
     for video in visible_videos:
@@ -215,7 +207,6 @@ if view == "⚡ QuickWatch":
                     file_path, file_name = download_video(video["link"])
                     with open(file_path, "rb") as file:
                         with st.modal("💾 Enter DemoUp Movie ID"):
-                            st.markdown("### 💾 Save Movie ID")
                             movie_id = st.text_input("Enter numeric DemoUp Movie ID", key=f"id_{video['link']}")
                             if movie_id and not movie_id.isnumeric():
                                 st.error("Only numbers are allowed.")
@@ -229,8 +220,9 @@ if view == "⚡ QuickWatch":
                 save_not_relevant(not_relevant)
                 st.rerun()
 
+    # --- Load More Button ---
     if offset + videos_per_page < len(videos):
-        if st.button("⬇️ Load more videos"):
+        if st.button("⬇️ Load More Videos"):
             st.session_state.quickwatch_offset += videos_per_page
             st.rerun()
 
