@@ -137,14 +137,19 @@ os.makedirs("downloads", exist_ok=True)
 
 def download_video(video_url):
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "bestvideo+bestaudio/best",
         "outtmpl": "downloads/%(id)s.%(ext)s",
-        "quiet": True
+        "quiet": True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=True)
-        file_path = f"downloads/{info['id']}.{info['ext']}"
-        return file_path, f"{info['id']}.{info['ext']}", info["id"]
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            file_path = f"downloads/{info['id']}.{info['ext']}"
+            return file_path, f"{info['id']}.{info['ext']}", info["id"]
+    except Exception as e:
+        st.error(f"❌ Download failed: {str(e)}")
+        return None, None, None
 
 # --- Archive View ---
 def archive_view(csv_path, label):
@@ -255,8 +260,9 @@ if view == "⚡ QuickWatch":
             if st.button("⬇️ Download", key=f"dl_{video['link']}"):
                 with st.spinner("Downloading..."):
                     path, fname, vid = download_video(video["link"])
-                    with open(path, "rb") as file:
-                        with st.modal("💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
+                    if path and fname and vid:
+                        with open(path, "rb") as file:
+                        with st.modal(f"💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
                             st.markdown("### Save Movie ID")
                             movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
                             if movie_id and not movie_id.isnumeric():
