@@ -146,15 +146,22 @@ def download_video(video_url):
             cwd="data"
         )
         if result.returncode != 0:
-            st.error(f"❌ Download failed:\n{result.stderr}")
+            st.error("❌ Download failed. Please check stderr below:")
+            st.code(result.stderr)
             return None, None, None
 
-        downloaded_file = result.stdout.strip().splitlines()[-1]  # Last line = filename
+        downloaded_file = result.stdout.strip().splitlines()[-1]
         full_path = os.path.join("data", downloaded_file)
-        return full_path, downloaded_file, os.path.splitext(downloaded_file)[0]  # file_id
+
+        # Move to downloads/ for local use
+        local_path = os.path.join("downloads", downloaded_file)
+        os.rename(full_path, local_path)
+
+        return local_path, downloaded_file, os.path.splitext(downloaded_file)[0]
     except Exception as e:
-        st.error(f"❌ Download failed: {e}")
+        st.error(f"❌ Exception during download: {e}")
         return None, None, None
+
 
 # --- Archive View ---
 def archive_view(csv_path, label):
