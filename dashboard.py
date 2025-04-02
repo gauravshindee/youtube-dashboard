@@ -262,7 +262,7 @@ if view == "⚡ QuickWatch":
                     path, fname, vid = download_video(video["link"])
                     if path and fname and vid:
                         with open(path, "rb") as file:
-                        with st.modal(f"💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
+                          with st.modal(f"💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
                             st.markdown("### Save Movie ID")
                             movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
                             if movie_id and not movie_id.isnumeric():
