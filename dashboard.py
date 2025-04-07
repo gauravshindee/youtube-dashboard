@@ -1,4 +1,5 @@
 # dashboard.py
+
 import streamlit as st
 import json
 import os
@@ -153,7 +154,6 @@ def download_video(video_url):
             st.code(result.stderr)
             return None, None, None
 
-        # Move to downloads/ for local access
         local_path = os.path.join("downloads", downloaded_file)
         os.rename(full_path, local_path)
 
@@ -163,8 +163,118 @@ def download_video(video_url):
         st.error(f"❌ Exception during download: {e}")
         return None, None, None
 
+# --- UI Config ---
+st.set_page_config(page_title="YouTube Dashboard", layout="wide")
+st.title("📺 YouTube Video Dashboard")
 
-# --- Archive View ---
+view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
+
+# --- QuickWatch ---
+if view == "⚡ QuickWatch":
+    with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
+        if st.text_input("Admin Password", type="password") == "demoup123":
+            if st.button("🔁 Fetch Now"):
+                with st.spinner("Fetching..."):
+                    try:
+                        fetch_videos_main()
+                        st.success("✅ Fetched successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Fetch failed.")
+                        st.exception(e)
+
+    videos = load_quickwatch()
+    df = pd.DataFrame(videos)
+    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        q = st.text_input("🔍 Search title")
+    with col2:
+        ch = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()))
+    with col3:
+        min_date = df["publish_date"].min().date()
+        max_date = df["publish_date"].max().date()
+        try:
+            start, end = st.date_input("📅 Date range", [min_date, max_date])
+        except ValueError:
+            st.warning("Please select complete date range.")
+            st.stop()
+
+    filtered = df.copy()
+    if q:
+        filtered = filtered[filtered["title"].str.contains(q, case=False, na=False)]
+    if ch != "All":
+        filtered = filtered[filtered["channel_name"] == ch]
+    filtered = filtered[(filtered["publish_date"].dt.date >= start) & (filtered["publish_date"].dt.date <= end)]
+
+    st.markdown(f"**🔎 {len(filtered)} results**")
+    per_page = 20
+    total_pages = max(1, (len(filtered) - 1) // per_page + 1)
+    page = st.number_input("Page", 1, total_pages, 1, key="quickwatch_page")
+
+    st.markdown(f"Page {page} of {total_pages}")
+    for video in filtered.iloc[(page-1)*per_page:page*per_page].to_dict("records"):
+        st.subheader(video["title"])
+        st.caption(f"{video['channel_name']} • {video['publish_date']}")
+        st.video(video["link"])
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
+                with st.spinner("Downloading..."):
+                    path, fname, vid = download_video(video["link"])
+                    if path and fname and vid:
+                        try:
+                            with open(path, "rb") as f:
+                                file_bytes = f.read()
+                        except Exception as e:
+                            st.error(f"Failed to read downloaded file: {e}")
+                            file_bytes = None
+
+                        with st.modal(f"💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
+                            st.markdown("### Save Movie ID")
+                            movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
+
+                            col_save, col_skip = st.columns(2)
+
+                            with col_save:
+                                if movie_id and not movie_id.isnumeric():
+                                    st.error("Only numbers allowed.")
+                                elif movie_id and st.button("✅ Save Movie ID", key=f"save_{vid}"):
+                                    save_movie_id_row({
+                                        "youtube_link": video["link"],
+                                        "demoup_movie_id": movie_id
+                                    })
+                                    st.success("Saved ✅")
+                                    if file_bytes:
+                                        st.download_button(
+                                            "📥 Download Video",
+                                            data=file_bytes,
+                                            file_name=fname,
+                                            mime="video/mp4"
+                                        )
+
+                            with col_skip:
+                                if st.button("❌ Not Uploaded Due to Some Reason", key=f"skip_{vid}"):
+                                    st.info("Skipped. You can try again later.")
+
+        with col2:
+            if st.button("🚫 Not Relevant", key=f"nr_{video['video_id']}"):
+                move_to_not_relevant(video)
+                st.rerun()
+
+    st.markdown(f"Page {page} of {total_pages}")
+
+# --- Not Relevant View ---
+elif view == "🚫 Not Relevant":
+    st.subheader("🚫 Not Relevant Videos")
+    for video in load_not_relevant():
+        st.subheader(video["title"])
+        st.caption(f"{video['channel_name']} • {video['publish_date']}")
+        st.video(video["link"])
+
+# --- Archive Views ---
 def archive_view(csv_path, label):
     if not os.path.exists(csv_path):
         st.warning(f"{label} CSV not found.")
@@ -210,110 +320,6 @@ def archive_view(csv_path, label):
         st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
         st.video(row["video_link"])
         st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
-
-# --- UI Config ---
-st.set_page_config(page_title="YouTube Dashboard", layout="wide")
-st.title("📺 YouTube Video Dashboard")
-
-view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
-
-# --- QuickWatch ---
-if view == "⚡ QuickWatch":
-    with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
-        if st.text_input("Admin Password", type="password") == "demoup123":
-            if st.button("🔁 Fetch Now"):
-                with st.spinner("Fetching..."):
-                    try:
-                        fetch_videos_main()
-                        st.success("✅ Fetched successfully.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error("Fetch failed.")
-                        st.exception(e)
-
-    videos = load_quickwatch()
-    not_relevant = load_not_relevant()
-    df = pd.DataFrame(videos)
-    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        q = st.text_input("🔍 Search title")
-    with col2:
-        ch = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()))
-    with col3:
-        min_date = df["publish_date"].min().date()
-        max_date = df["publish_date"].max().date()
-        try:
-            start, end = st.date_input("📅 Date range", [min_date, max_date])
-        except ValueError:
-            st.warning("Please select complete date range.")
-            st.stop()
-
-    filtered = df.copy()
-    if q:
-        filtered = filtered[filtered["title"].str.contains(q, case=False, na=False)]
-    if ch != "All":
-        filtered = filtered[filtered["channel_name"] == ch]
-    filtered = filtered[(filtered["publish_date"].dt.date >= start) & (filtered["publish_date"].dt.date <= end)]
-
-    st.markdown(f"**🔎 {len(filtered)} results**")
-    per_page = 20
-    total_pages = max(1, (len(filtered) - 1) // per_page + 1)
-    page = st.number_input("Page", 1, total_pages, 1, key="quickwatch_page")
-
-    st.markdown(f"Page {page} of {total_pages}")
-    for video in filtered.iloc[(page-1)*per_page:page*per_page].to_dict("records"):
-        st.subheader(video["title"])
-        st.caption(f"{video['channel_name']} • {video['publish_date']}")
-        st.video(video["link"])
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
-                with st.spinner("Downloading..."):
-                    path, fname, vid = download_video(video["link"])
-                    if path and fname and vid:
-                        with open(path, "rb") as file:
-                            with st.form(f"form_{vid}", clear_on_submit=True):
-                                st.markdown("### 💾 Enter DemoUp Movie ID")
-                                movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
-                                submit_save = st.form_submit_button("✅ Save Movie ID")
-                                submit_skip = st.form_submit_button("❌ Not Uploaded Due to Some Reason")
-
-                                if submit_save:
-                                    if not movie_id.isnumeric():
-                                        st.error("Only numbers allowed.")
-                                    else:
-                                        try:
-                                            sheet = None
-                                            sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
-                                            try:
-                                                sheet = sh.worksheet(MOVIE_ID_SHEET)
-                                            except gspread.exceptions.WorksheetNotFound:
-                                                sheet = sh.add_worksheet(title=MOVIE_ID_SHEET, rows="1000", cols="2")
-                                                sheet.append_row(["youtube_link", "demoup_movie_id"])
-
-                                            sheet.append_row([video["link"], movie_id])
-                                            st.success("✅ Saved Movie ID.")
-                                        except Exception as e:
-                                            st.error(f"❌ Failed to save: {e}")
-
-                        st.download_button("📥 Download Video", data=file, file_name=fname, mime="video/mp4")
-
-        with col2:
-            if st.button("🚫 Not Relevant", key=f"nr_{video['video_id']}"):
-                move_to_not_relevant(video)
-                st.rerun()
-    st.markdown(f"Page {page} of {total_pages}")
-
-# --- Not Relevant View ---
-elif view == "🚫 Not Relevant":
-    st.subheader("🚫 Not Relevant Videos")
-    for video in load_not_relevant():
-        st.subheader(video["title"])
-        st.caption(f"{video['channel_name']} • {video['publish_date']}")
-        st.video(video["link"])
 
 elif view == "📦 Archive (Official)":
     archive_view("data/archive.csv", "Archive (Official)")
