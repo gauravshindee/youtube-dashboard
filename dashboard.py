@@ -163,6 +163,53 @@ def download_video(video_url):
         st.error(f"❌ Exception during download: {e}")
         return None, None, None
 
+# --- Archive View Function ---
+def archive_view(csv_path, label):
+    if not os.path.exists(csv_path):
+        st.warning(f"{label} CSV not found.")
+        return
+
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
+    except UnicodeDecodeError:
+        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
+
+    df.columns = df.columns.str.strip().str.lower()
+    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+
+    st.subheader(f"📦 {label}")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        query = st.text_input("🔍 Search title", key=f"{label}_search")
+    with col2:
+        channel = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()), key=f"{label}_channel")
+    with col3:
+        min_date = df["publish_date"].min().date()
+        max_date = df["publish_date"].max().date()
+        try:
+            start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
+        except ValueError:
+            st.warning("Please select full date range.")
+            return
+
+    filtered = df.copy()
+    if query:
+        filtered = filtered[filtered["title"].str.contains(query, case=False, na=False)]
+    if channel != "All":
+        filtered = filtered[filtered["channel_name"] == channel]
+    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
+
+    st.markdown(f"**🔎 {len(filtered)} results found**")
+    per_page = 10
+    pages = max(1, (len(filtered) - 1) // per_page + 1)
+    page = st.number_input("Page", 1, pages, 1, key=f"{label}_page")
+
+    for _, row in filtered.iloc[(page-1)*per_page:page*per_page].iterrows():
+        st.subheader(row["title"])
+        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
+        st.video(row["video_link"])
+        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
+
 # --- UI Config ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
@@ -275,52 +322,6 @@ elif view == "🚫 Not Relevant":
         st.video(video["link"])
 
 # --- Archive Views ---
-def archive_view(csv_path, label):
-    if not os.path.exists(csv_path):
-        st.warning(f"{label} CSV not found.")
-        return
-
-    try:
-        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
-    except UnicodeDecodeError:
-        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
-
-    df.columns = df.columns.str.strip().str.lower()
-    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
-
-    st.subheader(f"📦 {label}")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        query = st.text_input("🔍 Search title", key=f"{label}_search")
-    with col2:
-        channel = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()), key=f"{label}_channel")
-    with col3:
-        min_date = df["publish_date"].min().date()
-        max_date = df["publish_date"].max().date()
-        try:
-            start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
-        except ValueError:
-            st.warning("Please select full date range.")
-            return
-
-    filtered = df.copy()
-    if query:
-        filtered = filtered[filtered["title"].str.contains(query, case=False, na=False)]
-    if channel != "All":
-        filtered = filtered[filtered["channel_name"] == channel]
-    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
-
-    st.markdown(f"**🔎 {len(filtered)} results found**")
-    per_page = 10
-    pages = max(1, (len(filtered) - 1) // per_page + 1)
-    page = st.number_input("Page", 1, pages, 1, key=f"{label}_page")
-
-    for _, row in filtered.iloc[(page-1)*per_page:page*per_page].iterrows():
-        st.subheader(row["title"])
-        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
-        st.video(row["video_link"])
-        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
-
 elif view == "📦 Archive (Official)":
     archive_view("data/archive.csv", "Archive (Official)")
 
