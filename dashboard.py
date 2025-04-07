@@ -24,6 +24,26 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_SECRET, scope)
 gs_client = gspread.authorize(credentials)
 
+# --- Download Archives ---
+RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
+RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
+
+def download_and_extract_zip(url, extract_to):
+    zip_path = "temp.zip"
+    r = requests.get(url)
+    if r.status_code == 200:
+        with open(zip_path, "wb") as f:
+            f.write(r.content)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall("data")
+        os.remove(zip_path)
+
+os.makedirs("data", exist_ok=True)
+if not os.path.exists("data/archive.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
+if not os.path.exists("data/archive_third_party.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
+
 # --- Secure Login ---
 CORRECT_PASSWORD = "DemoUp2025!"
 LOGIN_TIMEOUT = 4 * 60 * 60
@@ -47,7 +67,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     authenticate()
     st.stop()
 
-# --- Helper Functions ---
+# --- Sheet Helpers ---
 def load_sheet(name):
     return gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(name)
 
@@ -60,11 +80,29 @@ def load_not_relevant():
     except gspread.exceptions.WorksheetNotFound:
         return []
 
-def load_already_downloaded():
+def load_downloaded():
     try:
         return load_sheet(ALREADY_DOWNLOADED_SHEET).get_all_records()
     except gspread.exceptions.WorksheetNotFound:
         return []
+
+def save_to_downloaded(video):
+    try:
+        sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
+        try:
+            sheet = sh.worksheet(ALREADY_DOWNLOADED_SHEET)
+        except gspread.exceptions.WorksheetNotFound:
+            sheet = sh.add_worksheet(title=ALREADY_DOWNLOADED_SHEET, rows="1000", cols="5")
+            sheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
+        sheet.append_row([
+            video["video_id"],
+            video["title"],
+            video["channel_name"],
+            video["publish_date"],
+            video["link"]
+        ])
+    except Exception as e:
+        st.error(f"❌ Failed to save to downloaded tab: {e}")
 
 def move_to_not_relevant(video):
     try:
@@ -106,24 +144,6 @@ def move_to_not_relevant(video):
     except Exception as e:
         st.error(f"Failed to move to Not Relevant: {e}")
 
-def move_to_already_downloaded(video):
-    try:
-        sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
-        try:
-            sheet = sh.worksheet(ALREADY_DOWNLOADED_SHEET)
-        except gspread.exceptions.WorksheetNotFound:
-            sheet = sh.add_worksheet(title=ALREADY_DOWNLOADED_SHEET, rows="1000", cols="5")
-            sheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
-        sheet.append_row([
-            str(video.get("video_id", "")),
-            video.get("title", ""),
-            video.get("channel_name", ""),
-            video.get("publish_date", ""),
-            video.get("link", "")
-        ])
-    except Exception as e:
-        st.error(f"Failed to save to Already Downloaded: {e}")
-
 # --- Download Setup ---
 os.makedirs("downloads", exist_ok=True)
 
@@ -153,13 +173,59 @@ def download_video(video_url):
         st.error(f"❌ Exception during download: {e}")
         return None, None, None
 
-# --- UI Config ---
+# --- Archive View ---
+def archive_view(csv_path, label):
+    if not os.path.exists(csv_path):
+        st.warning(f"{label} CSV not found.")
+        return
+
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
+    except UnicodeDecodeError:
+        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
+
+    df.columns = df.columns.str.strip().str.lower()
+    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+
+    st.subheader(f"📦 {label}")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        query = st.text_input("🔍 Search title", key=f"{label}_search")
+    with col2:
+        channel = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()), key=f"{label}_channel")
+    with col3:
+        min_date = df["publish_date"].min().date()
+        max_date = df["publish_date"].max().date()
+        try:
+            start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
+        except ValueError:
+            st.warning("Please select full date range.")
+            return
+
+    filtered = df.copy()
+    if query:
+        filtered = filtered[filtered["title"].str.contains(query, case=False, na=False)]
+    if channel != "All":
+        filtered = filtered[filtered["channel_name"] == channel]
+    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
+
+    st.markdown(f"**🔎 {len(filtered)} results found**")
+    per_page = 10
+    pages = max(1, (len(filtered) - 1) // per_page + 1)
+    page = st.number_input("Page", 1, pages, 1, key=f"{label}_page")
+
+    for _, row in filtered.iloc[(page-1)*per_page:page*per_page].iterrows():
+        st.subheader(row["title"])
+        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
+        st.video(row["video_link"])
+        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
+
+# --- UI ---
 st.set_page_config(page_title="YouTube Dashboard", layout="wide")
 st.title("📺 YouTube Video Dashboard")
 
 view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevant", "✅ Already Downloaded", "📦 Archive (Official)", "📦 Archive (Third-Party)"])
 
-# --- QuickWatch View ---
 if view == "⚡ QuickWatch":
     with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
         if st.text_input("Admin Password", type="password") == "demoup123":
@@ -215,11 +281,8 @@ if view == "⚡ QuickWatch":
                 with st.spinner("Downloading..."):
                     path, fname, vid = download_video(video["link"])
                     if path and fname and vid:
-                        move_to_already_downloaded(video)
-                        st.success("✅ Downloaded and saved to Google Sheet")
-                        with open(path, "rb") as file:
-                            st.download_button("📥 Download File", data=file, file_name=fname, mime="video/mp4")
-
+                        save_to_downloaded(video)
+                        st.success("✅ Downloaded and logged.")
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['video_id']}"):
                 move_to_not_relevant(video)
@@ -227,7 +290,6 @@ if view == "⚡ QuickWatch":
 
     st.markdown(f"Page {page} of {total_pages}")
 
-# --- Not Relevant View ---
 elif view == "🚫 Not Relevant":
     st.subheader("🚫 Not Relevant Videos")
     for video in load_not_relevant():
@@ -235,60 +297,12 @@ elif view == "🚫 Not Relevant":
         st.caption(f"{video['channel_name']} • {video['publish_date']}")
         st.video(video["link"])
 
-# --- Already Downloaded View ---
 elif view == "✅ Already Downloaded":
     st.subheader("✅ Already Downloaded Videos")
-    for video in load_already_downloaded():
+    for video in load_downloaded():
         st.subheader(video["title"])
         st.caption(f"{video['channel_name']} • {video['publish_date']}")
         st.video(video["link"])
-
-# --- Archive Views ---
-def archive_view(csv_path, label):
-    if not os.path.exists(csv_path):
-        st.warning(f"{label} CSV not found.")
-        return
-
-    try:
-        df = pd.read_csv(csv_path, encoding="utf-8", on_bad_lines="skip")
-    except UnicodeDecodeError:
-        df = pd.read_csv(csv_path, encoding="latin1", on_bad_lines="skip")
-
-    df.columns = df.columns.str.strip().str.lower()
-    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
-
-    st.subheader(f"📦 {label}")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        query = st.text_input("🔍 Search title", key=f"{label}_search")
-    with col2:
-        channel = st.selectbox("🎞 Channel", ["All"] + sorted(df["channel_name"].dropna().unique()), key=f"{label}_channel")
-    with col3:
-        min_date = df["publish_date"].min().date()
-        max_date = df["publish_date"].max().date()
-        try:
-            start_date, end_date = st.date_input("📅 Date range", [min_date, max_date], key=f"{label}_date")
-        except ValueError:
-            st.warning("Please select full date range.")
-            return
-
-    filtered = df.copy()
-    if query:
-        filtered = filtered[filtered["title"].str.contains(query, case=False, na=False)]
-    if channel != "All":
-        filtered = filtered[filtered["channel_name"] == channel]
-    filtered = filtered[(filtered["publish_date"].dt.date >= start_date) & (filtered["publish_date"].dt.date <= end_date)]
-
-    st.markdown(f"**🔎 {len(filtered)} results found**")
-    per_page = 10
-    pages = max(1, (len(filtered) - 1) // per_page + 1)
-    page = st.number_input("Page", 1, pages, 1, key=f"{label}_page")
-
-    for _, row in filtered.iloc[(page-1)*per_page:page*per_page].iterrows():
-        st.subheader(row["title"])
-        st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
-        st.video(row["video_link"])
-        st.button("⬇️ Download", key=f"dl_{row['video_link']}_{label}")
 
 elif view == "📦 Archive (Official)":
     archive_view("data/archive.csv", "Archive (Official)")
