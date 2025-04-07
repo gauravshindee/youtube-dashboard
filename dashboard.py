@@ -275,27 +275,36 @@ if view == "⚡ QuickWatch":
                     path, fname, vid = download_video(video["link"])
                     if path and fname and vid:
                         with open(path, "rb") as file:
-                          with st.modal(f"💾 Enter DemoUp Movie ID", key=f"modal_{vid}"):
-                            st.markdown("### Save Movie ID")
-                            movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
-                            if movie_id and not movie_id.isnumeric():
-                                st.error("Only numbers allowed.")
-                            elif movie_id and st.button("Save ID", key=f"save_{vid}"):
-                                save_movie_id_row({
-                                    "movie_id": movie_id,
-                                    "video_id": vid,
-                                    "title": video["title"],
-                                    "channel_name": video["channel_name"],
-                                    "publish_date": str(video["publish_date"]),
-                                    "link": video["link"]
-                                })
-                                st.success("Saved.")
-                                st.download_button("📥 Download", data=file, file_name=fname, mime="video/mp4")
+                            with st.form(f"form_{vid}", clear_on_submit=True):
+                                st.markdown("### 💾 Enter DemoUp Movie ID")
+                                movie_id = st.text_input("Enter numeric Movie ID", key=f"id_{vid}")
+                                submit_save = st.form_submit_button("✅ Save Movie ID")
+                                submit_skip = st.form_submit_button("❌ Not Uploaded Due to Some Reason")
+
+                                if submit_save:
+                                    if not movie_id.isnumeric():
+                                        st.error("Only numbers allowed.")
+                                    else:
+                                        try:
+                                            sheet = None
+                                            sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
+                                            try:
+                                                sheet = sh.worksheet(MOVIE_ID_SHEET)
+                                            except gspread.exceptions.WorksheetNotFound:
+                                                sheet = sh.add_worksheet(title=MOVIE_ID_SHEET, rows="1000", cols="2")
+                                                sheet.append_row(["youtube_link", "demoup_movie_id"])
+
+                                            sheet.append_row([video["link"], movie_id])
+                                            st.success("✅ Saved Movie ID.")
+                                        except Exception as e:
+                                            st.error(f"❌ Failed to save: {e}")
+
+                        st.download_button("📥 Download Video", data=file, file_name=fname, mime="video/mp4")
+
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['video_id']}"):
                 move_to_not_relevant(video)
                 st.rerun()
-
     st.markdown(f"Page {page} of {total_pages}")
 
 # --- Not Relevant View ---
