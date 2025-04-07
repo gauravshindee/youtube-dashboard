@@ -29,6 +29,22 @@ gs_client = gspread.authorize(credentials)
 RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
 RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
 
+def download_and_extract_zip(url, extract_to):
+    zip_path = "temp.zip"
+    r = requests.get(url)
+    if r.status_code == 200:
+        with open(zip_path, "wb") as f:
+            f.write(r.content)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall("data")
+        os.remove(zip_path)
+
+os.makedirs("data", exist_ok=True)
+if not os.path.exists("data/archive.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
+if not os.path.exists("data/archive_third_party.csv"):
+    download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
+
 # --- Sheet Helpers ---
 def load_sheet(name):
     return gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(name)
