@@ -25,6 +25,10 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_SECRET, scope)
 gs_client = gspread.authorize(credentials)
 
+# --- Download Archives ---
+RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
+RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
+
 # --- Sheet Helpers ---
 def load_sheet(name):
     return gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(name)
