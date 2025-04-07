@@ -137,6 +137,17 @@ view = st.sidebar.radio("📂 Select View", ["⚡ QuickWatch", "🚫 Not Relevan
 
 # --- QuickWatch ---
 if view == "⚡ QuickWatch":
+    with st.expander("📡 Run Manual Video Fetch (Admin Only)"):
+        if st.text_input("Admin Password", type="password") == "demoup123":
+            if st.button("🔁 Fetch Now"):
+                with st.spinner("Fetching..."):
+                    try:
+                        fetch_videos_main()
+                        st.success("✅ Fetched successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Fetch failed.")
+                        st.exception(e)
     videos = load_quickwatch()
     df = pd.DataFrame(videos)
     df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
