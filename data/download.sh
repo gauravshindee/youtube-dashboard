@@ -18,8 +18,16 @@ if [ ! -f "$COOKIES_FILE" ]; then
   exit 1
 fi
 
-# Run yt-dlp to download best available .mp4 format (single file, no merging)
-yt-dlp --cookies "$COOKIES_FILE" -f "best[ext=mp4]" -o "$OUTPUT_DIR/%(id)s.%(ext)s" "$URL"
+# Download the video using yt-dlp and cookies
+yt-dlp --cookies "$COOKIES_FILE" \
+       -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]" \
+       --merge-output-format mp4 \
+       -o "$OUTPUT_DIR/%(id)s.%(ext)s" \
+       "$URL"
 
-# Print downloaded filename
-yt-dlp --cookies "$COOKIES_FILE" --get-filename -f "best[ext=mp4]" -o "%(id)s.%(ext)s" "$URL"
+# Get and print the output filename
+yt-dlp --cookies "$COOKIES_FILE" \
+       --get-filename \
+       -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]" \
+       -o "%(id)s.%(ext)s" \
+       "$URL"
