@@ -11,7 +11,6 @@ import requests
 import gspread
 import subprocess
 from oauth2client.service_account import ServiceAccountCredentials
-
 from fetch_videos import fetch_all as fetch_videos_main
 
 # --- Constants ---
@@ -24,26 +23,6 @@ SERVICE_ACCOUNT_SECRET = json.loads(st.secrets["gcp_service_account"])
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 credentials = ServiceAccountCredentials.from_json_keyfile_dict(SERVICE_ACCOUNT_SECRET, scope)
 gs_client = gspread.authorize(credentials)
-
-# --- Download Archives ---
-RAW_ZIP_URL_OFFICIAL = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive.csv.zip"
-RAW_ZIP_URL_THIRD_PARTY = "https://raw.githubusercontent.com/gauravshindee/youtube-dashboard/main/data/archive_third_party.csv.zip"
-
-def download_and_extract_zip(url, extract_to):
-    zip_path = "temp.zip"
-    r = requests.get(url)
-    if r.status_code == 200:
-        with open(zip_path, "wb") as f:
-            f.write(r.content)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall("data")
-        os.remove(zip_path)
-
-os.makedirs("data", exist_ok=True)
-if not os.path.exists("data/archive.csv"):
-    download_and_extract_zip(RAW_ZIP_URL_OFFICIAL, "data")
-if not os.path.exists("data/archive_third_party.csv"):
-    download_and_extract_zip(RAW_ZIP_URL_THIRD_PARTY, "data")
 
 # --- Secure Login ---
 CORRECT_PASSWORD = "DemoUp2025!"
@@ -68,7 +47,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     authenticate()
     st.stop()
 
-# --- Sheet Helpers ---
+# --- Helper Functions ---
 def load_sheet(name):
     return gs_client.open_by_key(GOOGLE_SHEET_ID).worksheet(name)
 
@@ -87,16 +66,54 @@ def load_already_downloaded():
     except gspread.exceptions.WorksheetNotFound:
         return []
 
-def move_to_sheet(sheet_name, video):
+def move_to_not_relevant(video):
     try:
         sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
-        sheet = None
+        qsheet = sh.worksheet(QUICKWATCH_SHEET)
         try:
-            sheet = sh.worksheet(sheet_name)
+            nsheet = sh.worksheet(NOT_RELEVANT_SHEET)
         except gspread.exceptions.WorksheetNotFound:
-            sheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="5")
-            sheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
+            nsheet = sh.add_worksheet(title=NOT_RELEVANT_SHEET, rows="1000", cols="5")
+            nsheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
 
+        all_rows = qsheet.get_all_records()
+        updated_rows = []
+        move_row = None
+
+        for row in all_rows:
+            if row["video_id"] == video["video_id"]:
+                move_row = row
+            else:
+                updated_rows.append(row)
+
+        if move_row:
+            nsheet.append_row([
+                str(move_row.get("video_id", "")),
+                move_row.get("title", ""),
+                move_row.get("channel_name", ""),
+                move_row.get("publish_date", ""),
+                move_row.get("link", "")
+            ])
+
+        if updated_rows:
+            qsheet.clear()
+            qsheet.append_row(list(updated_rows[0].keys()))
+            qsheet.append_rows([list(r.values()) for r in updated_rows])
+        else:
+            qsheet.clear()
+            qsheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
+
+    except Exception as e:
+        st.error(f"Failed to move to Not Relevant: {e}")
+
+def move_to_already_downloaded(video):
+    try:
+        sh = gs_client.open_by_key(GOOGLE_SHEET_ID)
+        try:
+            sheet = sh.worksheet(ALREADY_DOWNLOADED_SHEET)
+        except gspread.exceptions.WorksheetNotFound:
+            sheet = sh.add_worksheet(title=ALREADY_DOWNLOADED_SHEET, rows="1000", cols="5")
+            sheet.append_row(["video_id", "title", "channel_name", "publish_date", "link"])
         sheet.append_row([
             str(video.get("video_id", "")),
             video.get("title", ""),
@@ -105,13 +122,7 @@ def move_to_sheet(sheet_name, video):
             video.get("link", "")
         ])
     except Exception as e:
-        st.error(f"Failed to move video to {sheet_name}: {e}")
-
-def move_to_not_relevant(video):
-    move_to_sheet(NOT_RELEVANT_SHEET, video)
-
-def move_to_already_downloaded(video):
-    move_to_sheet(ALREADY_DOWNLOADED_SHEET, video)
+        st.error(f"Failed to save to Already Downloaded: {e}")
 
 # --- Download Setup ---
 os.makedirs("downloads", exist_ok=True)
@@ -200,22 +211,14 @@ if view == "⚡ QuickWatch":
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("⬇️ Download", key=f"dl_{video['video_id']}"):
+            if st.button("⬇️ Download", key=f"dl_{video['link']}"):
                 with st.spinner("Downloading..."):
                     path, fname, vid = download_video(video["link"])
                     if path and fname and vid:
-                        try:
-                            with open(path, "rb") as f:
-                                file_bytes = f.read()
-                            st.download_button(
-                                "📥 Download Video",
-                                data=file_bytes,
-                                file_name=fname,
-                                mime="video/mp4"
-                            )
-                            move_to_already_downloaded(video)
-                        except Exception as e:
-                            st.error(f"❌ Failed to process downloaded file: {e}")
+                        move_to_already_downloaded(video)
+                        st.success("✅ Downloaded and saved to Google Sheet")
+                        with open(path, "rb") as file:
+                            st.download_button("📥 Download File", data=file, file_name=fname, mime="video/mp4")
 
         with col2:
             if st.button("🚫 Not Relevant", key=f"nr_{video['video_id']}"):
