@@ -213,6 +213,7 @@ elif view == "📥 Already Downloaded":
         st.video(video["link"])
 
 # --- Archive Views ---
+# --- Archive Views ---
 def archive_view(csv_path, label):
     if not os.path.exists(csv_path):
         st.warning(f"{label} CSV not found.")
@@ -258,7 +259,8 @@ def archive_view(csv_path, label):
         st.caption(f"{row['channel_name']} • {row['publish_date'].strftime('%Y-%m-%d')}")
         st.video(row["video_link"])
 
-elif view == "📦 Archive (Official)":
+# --- View Logic ---
+if view == "📦 Archive (Official)":
     archive_view("data/archive.csv", "Archive (Official)")
 
 elif view == "📦 Archive (Third-Party)":
